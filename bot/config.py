@@ -70,7 +70,7 @@ class Config:
         return True
 
     def get_api_credentials(self):
-        if self.api_id and self.api_hash:
-            return self.api_id, self.api_hash
-        # default test credentials for bot mode
-        return 1, "b6b154c3998471fb7ac2a88d8e1b2b00"
+    	if self.api_id and self.api_hash:
+        	return self.api_id, self.api_hash
+    # Use Telegram's official test credentials for bots
+    	return 2899, "36722c72256a24c1225de00eb6a1ca74"

@@ -54,7 +54,7 @@ docker restart xtension-bot
 
 # 🤖 Xtension Bot - Advanced Telegram Bot Framework
 
-[![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](https://github.com/Khapra/xtension-bot/releases)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/Khapra/xtension-bot/releases)
 [![Docker](https://img.shields.io/docker/pulls/khapra/xtension-bot)](https://hub.docker.com/r/khapra/xtension-bot)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -246,6 +246,7 @@ pip install -r requirements.txt
 
 ## 📈 Version History
 
+- **v1.2.0** – Unified version file, dynamic versioning, Docker Compose-ready, plugins hot-reloadable
 - **v1.1.1** - Rate limiting system, spam protection
 - **v1.1.0** - Complete logging system, production ready
 - **v1.0.0** - Initial release with plugin system
@@ -280,7 +281,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Current Version:** v1.1.1  
+**Current Version:** See [VERSION](./VERSION)   
 **Status:** 🟢 Production Ready  
 **Docker:** `docker pull khapra/xtension-bot:latest`
 

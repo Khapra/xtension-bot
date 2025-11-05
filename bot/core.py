@@ -1,4 +1,4 @@
-"""Core bot implementation using Telethon - v1.1.1"""
+"""Core bot implementation using Telethon"""
 
 import logging
 import os
@@ -32,7 +32,7 @@ if log_level == "DEBUG":
 else:
     logging.basicConfig(
         level=getattr(logging, log_level, logging.INFO),
-        format='[%(asctime)s] %(levelname)-8s | %(message)s',
+        format='[%(asctime)s] %(levelname)-8s | %(name)s: %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
@@ -67,6 +67,19 @@ def debug_log_command(handler_name):
         return wrapper
     return decorator
 
+def _read_version_from_file() -> str:
+    candidates = []
+    try:
+        repo_root = Path(__file__).resolve().parents[1]
+        candidates.append(repo_root / "VERSION")
+        candidates.append(Path("/app/VERSION"))
+        for p in candidates:
+            if p.exists():
+                return p.read_text("utf-8").strip()
+    except Exception:
+        pass
+    return "unknown"
+
 class XtensionBot(TelegramClient):
     """Main bot class with plugin system and admin commands"""
     
@@ -92,7 +105,7 @@ class XtensionBot(TelegramClient):
 
         self.plugins: Dict[str, object] = {}
         self._start_time = datetime.now()
-        self.version = "1.1.3"
+        self.version = _read_version_from_file()
         self.commands_processed = 0
         
         # Admin configuration
@@ -613,4 +626,3 @@ class TelethonPlugin:
             logger.warning(f"Failed to load plugins: {', '.join(failed_plugins)}")
         
         logger.info(f"Plugin loading complete: {loaded_count} loaded, {len(failed_plugins)} failed")
-

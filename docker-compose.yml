@@ -1,40 +1,14 @@
-version: '1.1.1'
-
+version: '3.8'
 services:
   xtension-bot:
     image: khapra/xtension-bot:latest
     container_name: xtension-bot
-    environment:
-      # Required
-      BOT_TOKEN: ${BOT_TOKEN}
-      # Optional
-      ADMIN_IDS: ${ADMIN_IDS:-}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      # Rate limiting
-      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-30}
-      RATE_LIMIT_PER_HOUR: ${RATE_LIMIT_PER_HOUR:-300}
-      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-5}
-      RATE_LIMIT_BURST_WINDOW: ${RATE_LIMIT_BURST_WINDOW:-10}
-      RATE_LIMIT_COOLDOWN: ${RATE_LIMIT_COOLDOWN:-60}
-    volumes:
-      # Persistent session storage (Telegram authentication)
-      - ./sessions:/app/sessions
-      # Persistent data storage (databases, files)
-      - ./data:/app/data
-      # Custom plugins directory (read-only for safety)
-      - ./custom_plugins:/app/plugins:ro
-      # Log files (optional)
-      - ./logs:/app/logs
     restart: unless-stopped
-    networks:
-      - bot-network
-
-networks:
-  bot-network:
-    driver: bridge
-
-# Optional: Volume definitions for named volumes
-# volumes:
-#   sessions:
-#   data:
-#   logs:
+    env_file:
+      - .env
+    volumes:
+      - ./plugins:/app/plugins:ro
+      - ./data:/app/data
+      - ./sessions:/app/sessions
+      - ./.env:/app/.env:ro
+      - ./VERSION:/app/VERSION:ro

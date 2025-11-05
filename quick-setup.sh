@@ -1,9 +1,9 @@
 #!/bin/bash
-# Xtension Bot v1.1.1 - Quick Docker Setup
+# Xtension Bot v1.2.0 - Quick Docker Setup
 # No code download required!
 
 echo "╔══════════════════════════════════════════╗"
-echo "║     🚀 XTENSION BOT v1.1.1 SETUP 🚀      ║"
+echo "║     🚀 XTENSION BOT v1.2.0 SETUP 🚀      ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 

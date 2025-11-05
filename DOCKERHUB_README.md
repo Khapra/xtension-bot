@@ -1,6 +1,6 @@
 # 🤖 Xtension Bot
 
-[![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](https://github.com/Khapra/xtension-bot)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/Khapra/xtension-bot)
 [![GitHub](https://img.shields.io/badge/GitHub-Source-green.svg)](https://github.com/Khapra/xtension-bot)
 
 A powerful, modular Telegram bot with hot-reloadable plugins, rate limiting, and production-ready architecture.
@@ -83,6 +83,7 @@ Full documentation: https://github.com/Khapra/xtension-bot
 
 ## 🏷️ Available Tags
 
+- v1.2.0 – See [VERSION](https://github.com/Khapra/xtension-bot/blob/main/VERSION) for current release.
 - latest - Latest stable version
 - v1.1.1 - Version 1.1.1
 - main - Latest development build

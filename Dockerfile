@@ -10,9 +10,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
     apk del gcc musl-dev
 
-# Copy code
+# Copy code & version
 COPY bot/ ./bot/
 COPY plugins/ ./plugins/
+COPY VERSION /app/VERSION
 
 # Create runtime dirs and non-root user
 RUN mkdir -p sessions data plugins && \

@@ -1,24 +1,52 @@
-# Environment
+# Environment variables - NEVER COMMIT THESE!
 .env
+.env.local
+.env.*.local
+
+# Session files - Contains authentication data
+sessions/
+*.session
+*.session-journal
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
 .Python
 venv/
+env/
+ENV/
 .venv
 
-# Telethon sessions and data
-sessions/
-data/
-
-# Logs
-logs/
-
-# Editor
+# IDE
 .vscode/
 .idea/
-
-# macOS
+*.swp
+*.swo
+*~
 .DS_Store
+
+# Logs
+*.log
+logs/
+
+# Data directory
+data/
+
+# Test files
+test_*.py
+*.test
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Docker volumes
+docker-data/
+
+# Runtime files
+*.pid
+*.seed
+*.pid.lock

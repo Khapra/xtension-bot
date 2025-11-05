@@ -92,7 +92,7 @@ class XtensionBot(TelegramClient):
 
         self.plugins: Dict[str, object] = {}
         self._start_time = datetime.now()
-        self.version = "1.1.1"
+        self.version = "1.1.3"
         self.commands_processed = 0
         
         # Admin configuration

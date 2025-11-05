@@ -283,3 +283,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Current Version:** v1.1.1  
 **Status:** 🟢 Production Ready  
 **Docker:** `docker pull khapra/xtension-bot:latest`
+
+
+<!-- Docker Hub: https://hub.docker.com/r/khapra/xtension-bot -->

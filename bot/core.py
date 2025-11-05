@@ -1,4 +1,4 @@
-"""Core bot implementation using Telethon - v1.1.0"""
+"""Core bot implementation using Telethon - v1.1.1"""
 
 import logging
 import os
@@ -13,6 +13,7 @@ from telethon import TelegramClient, events, Button
 from telethon.sessions import SQLiteSession, MemorySession
 
 from .config import Config
+from .rate_limiter import RateLimiter
 
 # Configure logging based on environment
 logger = logging.getLogger(__name__)
@@ -91,12 +92,22 @@ class XtensionBot(TelegramClient):
 
         self.plugins: Dict[str, object] = {}
         self._start_time = datetime.now()
-        self.version = "1.1.0"
+        self.version = "1.1.1"
         self.commands_processed = 0
         
         # Admin configuration
         self.admin_ids = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x]
         logger.debug(f"Admin IDs configured: {self.admin_ids if self.admin_ids else 'None (all users are admins)'}")
+        
+        # Initialize rate limiter
+        self.rate_limiter = RateLimiter(
+            commands_per_minute=int(os.getenv("RATE_LIMIT_PER_MINUTE", "30")),
+            commands_per_hour=int(os.getenv("RATE_LIMIT_PER_HOUR", "300")),
+            burst_limit=int(os.getenv("RATE_LIMIT_BURST", "5")),
+            burst_window=int(os.getenv("RATE_LIMIT_BURST_WINDOW", "10")),
+            cooldown_time=int(os.getenv("RATE_LIMIT_COOLDOWN", "60"))
+        )
+        logger.debug(f"Rate limiter initialized: {self.rate_limiter.commands_per_minute}/min, {self.rate_limiter.commands_per_hour}/hour")
 
     async def start(self):
         """Start the bot and initialize all systems"""
@@ -125,6 +136,7 @@ class XtensionBot(TelegramClient):
         print(f"🤖 Bot: @{self.me.username}")
         print(f"🔌 Plugins: {len(self.plugins)} loaded")
         print(f"📝 Log Level: {os.getenv('LOG_LEVEL', 'INFO')}")
+        print(f"🛡️ Rate Limiting: {self.rate_limiter.commands_per_minute}/min")
         print(f"{'='*50}\n")
         
         logger.info(f"Bot ready with {len(self.plugins)} plugins loaded")
@@ -137,6 +149,17 @@ class XtensionBot(TelegramClient):
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"Admin check for user {user_id}: {'✓' if is_admin else '✗'}")
         return is_admin
+    
+    async def check_rate_limit(self, event):
+        """Check if user is rate limited"""
+        if self.is_admin(event.sender_id):
+            return False  # Admins bypass rate limits
+        
+        is_limited, message = self.rate_limiter.is_rate_limited(event.sender_id)
+        if is_limited:
+            await event.reply(message)
+            return True
+        return False
 
     def _register_handlers(self):
         """Register all core command handlers"""
@@ -144,6 +167,8 @@ class XtensionBot(TelegramClient):
         @self.on(events.NewMessage(pattern='/start'))
         @debug_log_command("start")
         async def start_handler(event):
+            if await self.check_rate_limit(event):
+                return
             self.commands_processed += 1
             sender = await event.get_sender()
             admin_text = " (Admin)" if self.is_admin(event.sender_id) else ""
@@ -158,6 +183,8 @@ class XtensionBot(TelegramClient):
         @self.on(events.CallbackQuery(data=b"show_help"))
         @debug_log_command("help_button")
         async def help_button(event):
+            if await self.check_rate_limit(event):
+                return
             self.commands_processed += 1
             commands = self._get_all_commands(event.sender_id)
             text = self._format_help_text(commands)
@@ -167,6 +194,8 @@ class XtensionBot(TelegramClient):
         @self.on(events.NewMessage(pattern='/help'))
         @debug_log_command("help")
         async def help_handler(event):
+            if await self.check_rate_limit(event):
+                return
             self.commands_processed += 1
             commands = self._get_all_commands(event.sender_id)
             text = self._format_help_text(commands)
@@ -175,12 +204,16 @@ class XtensionBot(TelegramClient):
         @self.on(events.NewMessage(pattern='/ping'))
         @debug_log_command("ping")
         async def ping_handler(event):
+            if await self.check_rate_limit(event):
+                return
             self.commands_processed += 1
             await event.reply("🏓 Pong!")
 
         @self.on(events.NewMessage(pattern='/plugins'))
         @debug_log_command("plugins")
         async def plugins_handler(event):
+            if await self.check_rate_limit(event):
+                return
             self.commands_processed += 1
             if self.plugins:
                 plugin_info = []
@@ -196,6 +229,8 @@ class XtensionBot(TelegramClient):
         @self.on(events.NewMessage(pattern='/version'))
         @debug_log_command("version")
         async def version_handler(event):
+            if await self.check_rate_limit(event):
+                return
             self.commands_processed += 1
             uptime = datetime.now() - self._start_time
             await event.reply(
@@ -305,7 +340,7 @@ class XtensionBot(TelegramClient):
             # Count total commands
             total_commands = 6  # Core commands
             if self.is_admin(event.sender_id):
-                total_commands += 4  # Admin commands
+                total_commands += 5  # Admin commands including /ratelimit
             
             for plugin in self.plugins.values():
                 if hasattr(plugin, 'commands'):
@@ -320,6 +355,9 @@ class XtensionBot(TelegramClient):
             except:
                 memory_str = "N/A"
             
+            # Get rate limit stats
+            rl_stats = self.rate_limiter.get_global_stats()
+            
             stats_text = f"""📊 **Bot Statistics**
             
 🤖 **Bot:** @{self.me.username}
@@ -330,6 +368,13 @@ class XtensionBot(TelegramClient):
 🔌 **Plugins:** {len(self.plugins)} loaded
 📝 **Total Commands:** {total_commands} available
 
+🛡️ **Rate Limiting:**
+• Commands Allowed: {rl_stats['total_commands_allowed']}
+• Commands Blocked: {rl_stats['total_commands_limited']}
+• Block Rate: {rl_stats['limit_percentage']}%
+• Users Tracked: {rl_stats['total_users_tracked']}
+• Users in Cooldown: {rl_stats['users_in_cooldown']}
+
 🛠 **System:**
 • Python: {sys.version.split()[0]}
 • Platform: {sys.platform}
@@ -338,6 +383,64 @@ class XtensionBot(TelegramClient):
 • Log Level: {os.getenv('LOG_LEVEL', 'INFO')}
 """
             await event.reply(stats_text, parse_mode='md')
+        
+        @self.on(events.NewMessage(pattern='/ratelimit'))
+        @debug_log_command("ratelimit")
+        async def ratelimit_handler(event):
+            self.commands_processed += 1
+            if not self.is_admin(event.sender_id):
+                await event.reply("❌ This command is for admins only!")
+                return
+            
+            # Parse command: /ratelimit [stats|reset <user_id>|global]
+            parts = event.text.split()
+            
+            if len(parts) == 1 or parts[1] == "global":
+                # Show global stats
+                stats = self.rate_limiter.get_global_stats()
+                text = f"""📊 **Rate Limiting Statistics**
+                
+**Active Users:** {stats['total_users_tracked']}
+**Users Limited:** {stats['users_in_cooldown']}
+**Commands Allowed:** {stats['total_commands_allowed']}
+**Commands Blocked:** {stats['total_commands_limited']}
+**Block Rate:** {stats['limit_percentage']}%
+
+**Current Limits:**
+• Per Minute: {self.rate_limiter.commands_per_minute}
+• Per Hour: {self.rate_limiter.commands_per_hour}
+• Burst: {self.rate_limiter.burst_limit} in {self.rate_limiter.burst_window}s
+"""
+                await event.reply(text, parse_mode='md')
+            
+            elif parts[1] == "reset" and len(parts) > 2:
+                # Reset specific user
+                try:
+                    target_user = int(parts[2])
+                    self.rate_limiter.reset_user(target_user)
+                    await event.reply(f"✅ Reset rate limits for user {target_user}")
+                except ValueError:
+                    await event.reply("❌ Invalid user ID")
+            
+            elif parts[1] == "stats" and len(parts) > 2:
+                # Show user stats
+                try:
+                    target_user = int(parts[2])
+                    stats = self.rate_limiter.get_user_stats(target_user)
+                    text = f"""👤 **User {target_user} Rate Limit Stats**
+                    
+**Last Minute:** {stats['commands_last_minute']}/{stats['limit_per_minute']}
+**Last Hour:** {stats['commands_last_hour']}/{stats['limit_per_hour']}
+**Cooldown:** {'Yes' if stats['in_cooldown'] else 'No'}
+"""
+                    if stats['in_cooldown']:
+                        text += f"**Cooldown Remaining:** {stats['cooldown_remaining']}s"
+                    await event.reply(text, parse_mode='md')
+                except ValueError:
+                    await event.reply("❌ Invalid user ID")
+            
+            else:
+                await event.reply("Usage: /ratelimit [global|stats <user_id>|reset <user_id>]")
     
     def _get_all_commands(self, user_id):
         """Dynamically get all available commands based on loaded plugins"""
@@ -359,7 +462,8 @@ class XtensionBot(TelegramClient):
                 "/reload": "Hot-reload all plugins without restart",
                 "/restart": "Restart the bot process completely",
                 "/shutdown": "Stop the bot",
-                "/stats": "Detailed bot statistics"
+                "/stats": "Detailed bot statistics",
+                "/ratelimit": "Manage rate limiting (view stats, reset users)"
             }
         
         # Dynamically add plugin commands from loaded plugins
@@ -393,7 +497,7 @@ class XtensionBot(TelegramClient):
         return text
 
     async def _load_plugins(self):
-        """Load all plugins from the plugins directory with automatic logging"""
+        """Load all plugins from the plugins directory with automatic logging and rate limiting"""
         plugin_dir = Path(self.config.plugin_dir)
         plugin_dir.mkdir(exist_ok=True)
         
@@ -418,11 +522,15 @@ class TelethonPlugin:
     def register_handlers(self):
         @self.bot.on(events.NewMessage(pattern='/hello'))
         async def hello(event):
+            if await self.bot.check_rate_limit(event):
+                return
             sender = await event.get_sender()
             await event.reply(f'Hello {sender.first_name}! This is the example plugin 👋')
         
         @self.bot.on(events.NewMessage(pattern='/echo (.+)'))
         async def echo(event):
+            if await self.bot.check_rate_limit(event):
+                return
             text = event.pattern_match.group(1)
             await event.reply(f"Echo: {text}")
 ''')

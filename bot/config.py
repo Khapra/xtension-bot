@@ -56,7 +56,6 @@ class Config:
             data_dir=os.getenv("DATA_DIR", "data"),
             session_dir=os.getenv("SESSION_DIR", "sessions"),
             log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
-            debug=os.getenv("DEBUG", "false").lower() in ("true","1","yes"),
             enable_plugins=os.getenv("ENABLE_PLUGINS", "true").lower() in ("true","1","yes"),
             auto_load_plugins=auto_load
         )

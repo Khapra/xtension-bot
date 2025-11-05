@@ -1,4 +1,4 @@
-version: '3.8'
+version: '1.1'
 
 services:
   xtension-bot:
@@ -10,8 +10,8 @@ services:
       API_HASH: ${API_HASH:-}
       SESSION_TYPE: ${SESSION_TYPE:-sqlite}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      DEBUG: ${DEBUG:-false}
       ENABLE_PLUGINS: ${ENABLE_PLUGINS:-true}
+      ADMIN_IDS: ${ADMIN_IDS:-}
     volumes:
       - ./sessions:/app/sessions
       - ./data:/app/data

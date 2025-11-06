@@ -228,6 +228,9 @@ services:
       - ./custom_plugins:/app/plugins:ro
     restart: unless-stopped
 ```
+> **⚠️ Disclaimer:**  
+> This bot, by default, uses the provided [Telegram Demo API ID and Hash](https://my.telegram.org/auth) _(149344, '1c760da900d9a3e28b17c16410680dae')_ intended only for testing.  
+> **If you plan to use the bot for real deployments or production, register your own API ID and Hash on https://my.telegram.org and update your `.env` file accordingly!**
 
 ## 🔄 Updates
 

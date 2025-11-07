@@ -1,7 +1,9 @@
-# Production-ready Dockerfile (alpine-based)
+# Production-ready Dockerfile (Alpine, with PUID/PGID support via entrypoint)
+
 FROM python:3.11-alpine
 
-RUN apk add --no-cache gcc musl-dev libffi-dev
+# Install build/runtime dependencies + su-exec for user switching
+RUN apk add --no-cache gcc musl-dev libffi-dev su-exec
 
 WORKDIR /app
 
@@ -10,18 +12,21 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
     apk del gcc musl-dev
 
-# Copy code & version
+# Copy core bot code, version, and only plugins README (no .py plugins)
 COPY bot/ ./bot/
-COPY plugins/ ./plugins/
 COPY VERSION /app/VERSION
+COPY plugins/README.md plugins/
+# COPY plugins/.keep plugins/  # uncomment if you use it
 
-# Create runtime dirs and non-root user
-RUN mkdir -p sessions data plugins && \
-    adduser -D -u 1000 botuser && \
-    chown -R botuser:botuser /app
+# Copy entrypoint with PUID/PGID support
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-USER botuser
+# Create runtime dirs (ownership fixed by entrypoint), no user here
+RUN mkdir -p sessions data plugins logs
 
 ENV PYTHONUNBUFFERED=1
 
+# Use entrypoint to handle PUID/PGID and chown at container start
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "-m", "bot"]

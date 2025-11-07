@@ -1,21 +1,33 @@
-# 🚀 INSTANT SETUP - NO DOWNLOADS REQUIRED!
+# 🚀 Xtension Bot – Fast, Modular Telegram Bot Framework
 
-Run Xtension Bot with just Docker - no Git, no Python needed!
+Run in seconds with Docker.  
+Add features with plugins you choose—no bloat, no surprises!
 
-## Quick Start (30 seconds!)
+---
 
-### Option 1: Simplest - One Command
+## 🚦 Quick Start with Docker
+
+### One-Liner
+
 ```bash
 docker run -d \
-  -e BOT_TOKEN="YOUR_BOT_TOKEN_HERE" \
+  -e BOT_TOKEN="YOUR_BOT_TOKEN" \
   -e LOG_LEVEL="INFO" \
   --name xtension-bot \
-  --restart unless-stopped \
+  -v $(pwd)/plugins:/app/plugins \
   khapra/xtension-bot:latest
 ```
 
-### Option 2: Docker Compose
-Create `docker-compose.yml`:
+**Plugins not included:**  
+Create a `plugins` directory beside `docker-compose.yml` or where you run `docker run`.  
+Download only the `.py` plugin files you want from  
+https://github.com/Khapra/xtension-bot/tree/main/plugins  
+and put them in your `plugins` folder before you run the bot!
+
+---
+
+## 🐳 Docker Compose Example
+
 ```yaml
 version: '3.8'
 services:
@@ -25,268 +37,120 @@ services:
       BOT_TOKEN: YOUR_BOT_TOKEN_HERE
       ADMIN_IDS: YOUR_TELEGRAM_ID  # Optional
       LOG_LEVEL: INFO
-    restart: unless-stopped
-```
-Then run: `docker-compose up -d`
-
-### Option 3: Interactive Setup
-```bash
-curl -sSL https://raw.githubusercontent.com/Khapra/xtension-bot/main/quick-setup.sh | bash
-```
-
-## Management Commands
-```bash
-# View logs
-docker logs -f xtension-bot
-
-# Stop bot
-docker stop xtension-bot
-
-# Remove bot
-docker rm xtension-bot
-
-# Update to latest version
-docker pull khapra/xtension-bot:latest
-docker restart xtension-bot
-```
-
----
-
-# 🤖 Xtension Bot - Advanced Telegram Bot Framework
-
-[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/Khapra/xtension-bot/releases)
-[![Docker](https://img.shields.io/docker/pulls/khapra/xtension-bot)](https://hub.docker.com/r/khapra/xtension-bot)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-
-A powerful, modular Telegram bot built with Telethon featuring hot-reloadable plugins, rate limiting, and production-ready architecture.
-
-## ✨ Features
-
-- 🔌 **Plugin System** - Hot-reloadable plugins without restarting
-- 🛡️ **Rate Limiting** - Advanced spam protection (v1.1.1)
-- 📊 **Flexible Logging** - DEBUG/INFO modes for development and production
-- 🐳 **Docker Support** - One-command deployment
-- 🔐 **Admin Controls** - Comprehensive bot management
-- ⚡ **Fast & Lightweight** - Built with Telethon for optimal performance
-- 🎯 **Production Ready** - Enterprise-grade error handling
-
-## 🚀 Installation Methods
-
-### Method 1: Traditional Setup
-
-1. **Clone the repository:**
-```bash
-git clone https://github.com/Khapra/xtension-bot.git
-cd xtension-bot
-```
-
-2. **Set up virtual environment:**
-```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. **Install dependencies:**
-```bash
-pip install -r requirements.txt
-```
-
-4. **Configure environment:**
-```bash
-cp .env.example .env
-# Edit .env and add your BOT_TOKEN
-```
-
-5. **Run the bot:**
-```bash
-python -m bot
-```
-
-### Method 2: Docker (Recommended)
-See the Quick Start section above for Docker deployment.
-
-## 📋 Configuration
-
-### Environment Variables
-
-Create a `.env` file with:
-
-```env
-# Required
-BOT_TOKEN=your_bot_token_from_botfather
-
-# Optional
-ADMIN_IDS=123456789,987654321
-LOG_LEVEL=INFO  # or DEBUG
-
-# Rate Limiting (v1.1.1)
-RATE_LIMIT_PER_MINUTE=30
-RATE_LIMIT_PER_HOUR=300
-RATE_LIMIT_BURST=5
-RATE_LIMIT_BURST_WINDOW=10
-RATE_LIMIT_COOLDOWN=60
-```
-
-## 🎮 Commands
-
-### Core Commands
-- `/start` - Welcome message and bot info
-- `/help` - List all available commands
-- `/ping` - Check bot responsiveness
-- `/stats` - View bot statistics (admin only)
-- `/version` - Show bot version
-- `/plugins` - Manage plugins (admin only)
-- `/reload [plugin]` - Hot-reload plugins
-- `/restart` - Restart the bot (admin only)
-- `/logs [lines]` - View recent logs (admin only)
-- `/ratelimit` - Manage rate limits (admin only)
-
-### Fun Commands
-- `/joke` - Get a random joke
-- `/meme` - Generate a random meme
-- `/8ball <question>` - Ask the magic 8-ball
-- `/roll [sides]` - Roll a dice
-- `/flip` - Flip a coin
-
-### Info Commands
-- `/info [user]` - Get user information
-- `/chatinfo` - Get chat information
-- `/userid` - Get your user ID
-- `/time [timezone]` - Get current time
-
-## 🔌 Plugin Development
-
-Create custom plugins in the `plugins/` directory:
-
-```python
-# plugins/my_plugin.py
-from bot.plugin_wrapper import PluginWrapper
-
-plugin = PluginWrapper("MyPlugin")
-
-@plugin.command("mycommand")
-async def my_command(event):
-    """Description of your command"""
-    await event.reply("Hello from my plugin!")
-
-def setup():
-    return plugin
-```
-
-## 🛡️ Rate Limiting (v1.1.1)
-
-Advanced rate limiting system to prevent spam:
-- **Per-minute limit**: 30 commands (configurable)
-- **Per-hour limit**: 300 commands (configurable)
-- **Burst detection**: 5 commands in 10 seconds triggers cooldown
-- **Admin bypass**: Admins are exempt from all limits
-- **Auto-cooldown**: Automatic temporary bans for violators
-
-## 📊 Monitoring
-
-### View Logs
-```bash
-# Docker
-docker logs -f xtension-bot
-
-# Traditional
-tail -f bot.log
-```
-
-### Bot Statistics
-Use `/stats` command in Telegram (admin only) to see:
-- Uptime and performance
-- Total commands processed
-- Active plugins
-- Rate limit statistics
-- Memory usage
-
-## 🚀 Deployment
-
-### Deploy to VPS/Cloud
-```bash
-# Using Docker (recommended)
-docker run -d \
-  -e BOT_TOKEN="your_token" \
-  -e ADMIN_IDS="your_id" \
-  --restart unless-stopped \
-  khapra/xtension-bot:latest
-```
-
-### Deploy with docker-compose
-```yaml
-version: '3.8'
-services:
-  bot:
-    image: khapra/xtension-bot:latest
-    environment:
-      BOT_TOKEN: ${BOT_TOKEN}
-      ADMIN_IDS: ${ADMIN_IDS}
-      LOG_LEVEL: INFO
+      PUID: 1000   # Optional, see advanced permissions
+      PGID: 1000
     volumes:
+      - ./plugins:/app/plugins
+      - ./sessions:/app/sessions
       - ./data:/app/data
-      - ./custom_plugins:/app/plugins:ro
+      - ./logs:/app/logs
     restart: unless-stopped
 ```
-> **⚠️ Disclaimer:**  
-> This bot, by default, uses the provided [Telegram Demo API ID and Hash](https://my.telegram.org/auth) _(149344, '1c760da900d9a3e28b17c16410680dae')_ intended only for testing.  
-> **If you plan to use the bot for real deployments or production, register your own API ID and Hash on https://my.telegram.org and update your `.env` file accordingly!**
-
-## 🔄 Updates
-
-### Docker Update
-```bash
-docker pull khapra/xtension-bot:latest
-docker restart xtension-bot
-```
-
-### Git Update
-```bash
-git pull origin main
-pip install -r requirements.txt
-# Restart bot
-```
-
-## 📈 Version History
-
-- **v1.2.0** – Unified version file, dynamic versioning, Docker Compose-ready, plugins hot-reloadable
-- **v1.1.1** - Rate limiting system, spam protection
-- **v1.1.0** - Complete logging system, production ready
-- **v1.0.0** - Initial release with plugin system
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 👤 Author
-
-**Khapra**
-- GitHub: [@Khapra](https://github.com/Khapra)
-- Docker Hub: [khapra/xtension-bot](https://hub.docker.com/r/khapra/xtension-bot)
-
-## 🙏 Acknowledgments
-
-- Built with [Telethon](https://github.com/LonamiWebs/Telethon)
-- Inspired by the Telegram bot community
-
-## 📞 Support
-
-- Create an issue on [GitHub](https://github.com/Khapra/xtension-bot/issues)
-- Check [Discussions](https://github.com/Khapra/xtension-bot/discussions)
+- **Place the `.py` plugins you want in your `./plugins/` — the container loads them at startup.**
+- All data will persist in the mounted directories.
 
 ---
 
-**Current Version:** See [VERSION](./VERSION)   
-**Status:** 🟢 Production Ready  
-**Docker:** `docker pull khapra/xtension-bot:latest`
+## ⚡ Why Xtension Bot?
 
+- **No bundled plugins:** Only use what you want.
+- **Safe to update:** No user code is ever overwritten.
+- **Hot-reload plugins:** Drop new files in and go!
+- **Production-ready:** Modern, MIT-licensed.
+
+---
+
+## 🌱 Traditional Manual Setup
+
+1. Clone:
+    ```bash
+    git clone https://github.com/Khapra/xtension-bot.git
+    cd xtension-bot
+    ```
+2. Setup venv:
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
+    ```
+3. Copy your plugins from GitHub into `plugins/`
+4. Create `.env` (see Environment Variables below)
+5. Start:
+    ```bash
+    python -m bot
+    ```
+
+---
+
+## ⚙️ Environment Variables
+
+| Variable             | Description                       | Required / Default      |
+|----------------------|-----------------------------------|------------------------|
+| BOT_TOKEN            | Telegram Bot Token                | **Required**           |
+| ADMIN_IDS            | Comma-separated admin IDs         | Optional               |
+| LOG_LEVEL            | Logging level (`INFO`/`DEBUG`)    | INFO                   |
+| RATE_LIMIT_PER_MINUTE| Commands per minute               | 30                     |
+| RATE_LIMIT_PER_HOUR  | Commands per hour                 | 300                    |
+| PUID                 | UID inside container              | 1000                   |
+| PGID                 | GID inside container              | 1000                   |
+
+---
+
+## 🔌 Plugins
+
+- Browse official plugins:  
+  https://github.com/Khapra/xtension-bot/tree/main/plugins
+- Download only the ones you want.
+- Place `.py` files in your `plugins` directory (mapped to `/app/plugins` in Docker).
+- **No plugins are ever automatically installed.**
+- Remove a `.py` file to instantly disable that plugin.
+
+---
+
+## 🛡️ Rate Limiting
+
+- Prevent spam with minute/hour/burst limits.
+- Admins are always exempt.
+- All limits are easily tuned via env or `.env`.
+
+---
+
+## 🛠️ Logs & Management
+
+- View logs:
+    ```bash
+    docker logs -f xtension-bot
+    ```
+- Update:
+    ```bash
+    docker pull khapra/xtension-bot:latest
+    docker restart xtension-bot
+    ```
+- All persistent data is in `./sessions`, `./data`, `./logs`.
+
+---
+
+## ⚠️ Disclaimer
+
+**This bot uses [Telegram Demo API keys](https://my.telegram.org/auth) by default (149344, '1c760da900d9a3e28b17c16410680dae') for demo/testing only.  
+For production, [register your own API ID/Hash](https://my.telegram.org) and set them in your `.env`.**
+
+---
+
+## 📈 Version
+
+- **Current version:** See [VERSION](./VERSION)  
+- **Release notes:** https://github.com/Khapra/xtension-bot/releases
+
+---
+
+## 💡 Enjoy!  
+Questions? [Open an Issue](https://github.com/Khapra/xtension-bot/issues) — Feedback & PRs welcome!
+
+---
+
+**Author:** [Khapra](https://github.com/Khapra)  
+**License:** MIT  
+**Docker Hub:** [khapra/xtension-bot](https://hub.docker.com/r/khapra/xtension-bot)
 
 <!-- Docker Hub: https://hub.docker.com/r/khapra/xtension-bot -->

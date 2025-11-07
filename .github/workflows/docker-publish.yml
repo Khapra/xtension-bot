@@ -79,5 +79,4 @@ jobs:
           token: ${{ secrets.GH_TOKEN }}
           files: |
             VERSION
-            README.md
             plugins/README.md

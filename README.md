@@ -1,4 +1,4 @@
-# 🚀 Xtension Bot v1.3.1 – Fast, Modular Telegram Bot Framework
+# 🚀 Xtension Bot v1.3.3 – Fast, Modular Telegram Bot Framework
 
 Run in seconds with Docker.  
 Add features with plugins you choose—no bloat, no surprises!
@@ -49,7 +49,7 @@ services:
 
 ---
 
-## ⚡ What's New in v1.3.1?
+## ⚡ What's New in v1.3.3?
 
 - Enhanced release pipeline with secure, automated PR-based versioning.
 - Faster startup and hot-reload system for plugins.
@@ -144,7 +144,7 @@ For production, [register your own API ID/Hash](https://my.telegram.org) and set
 
 ## 📈 Version
 
-- **Current version:** [`v1.3.1`](./VERSION)
+- **Current version:** [`v1.3.3`](./VERSION)
 - **Release notes:** https://github.com/Khapra/xtension-bot/releases
 
 ---

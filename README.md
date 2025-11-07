@@ -1,4 +1,4 @@
-# 🚀 Xtension Bot – Fast, Modular Telegram Bot Framework
+# 🚀 Xtension Bot v1.3.0 – Fast, Modular Telegram Bot Framework
 
 Run in seconds with Docker.  
 Add features with plugins you choose—no bloat, no surprises!
@@ -6,8 +6,6 @@ Add features with plugins you choose—no bloat, no surprises!
 ---
 
 ## 🚦 Quick Start with Docker
-
-### One-Liner
 
 ```bash
 docker run -d \
@@ -51,16 +49,25 @@ services:
 
 ---
 
+## ⚡ What's New in v1.3.0?
+
+- Enhanced release pipeline with secure, automated PR-based versioning.
+- Faster startup and hot-reload system for plugins.
+- Improved environment variable management and runtime warnings.
+- [List other new features, major fixes, or improvements]
+
+---
+
 ## ⚡ Why Xtension Bot?
 
-- **No bundled plugins:** Only use what you want.
+- **No bundled plugins:** Choose only what you want.
 - **Safe to update:** No user code is ever overwritten.
 - **Hot-reload plugins:** Drop new files in and go!
 - **Production-ready:** Modern, MIT-licensed.
 
 ---
 
-## 🌱 Traditional Manual Setup
+## 🌱 Manual Setup
 
 1. Clone:
     ```bash
@@ -84,15 +91,15 @@ services:
 
 ## ⚙️ Environment Variables
 
-| Variable             | Description                       | Required / Default      |
-|----------------------|-----------------------------------|------------------------|
-| BOT_TOKEN            | Telegram Bot Token                | **Required**           |
-| ADMIN_IDS            | Comma-separated admin IDs         | Optional               |
-| LOG_LEVEL            | Logging level (`INFO`/`DEBUG`)    | INFO                   |
-| RATE_LIMIT_PER_MINUTE| Commands per minute               | 30                     |
-| RATE_LIMIT_PER_HOUR  | Commands per hour                 | 300                    |
-| PUID                 | UID inside container              | 1000                   |
-| PGID                 | GID inside container              | 1000                   |
+| Variable               | Description                        | Required / Default |
+|------------------------|------------------------------------|--------------------|
+| BOT_TOKEN              | Telegram Bot Token                 | **Required**       |
+| ADMIN_IDS              | Comma-separated admin IDs          | Optional           |
+| LOG_LEVEL              | Logging level (INFO/DEBUG)         | INFO               |
+| RATE_LIMIT_PER_MINUTE  | Commands per minute                | 30                 |
+| RATE_LIMIT_PER_HOUR    | Commands per hour                  | 300                |
+| PUID                   | UID inside container               | 1000               |
+| PGID                   | GID inside container               | 1000               |
 
 ---
 
@@ -100,9 +107,7 @@ services:
 
 - Browse official plugins:  
   https://github.com/Khapra/xtension-bot/tree/main/plugins
-- Download only the ones you want.
 - Place `.py` files in your `plugins` directory (mapped to `/app/plugins` in Docker).
-- **No plugins are ever automatically installed.**
 - Remove a `.py` file to instantly disable that plugin.
 
 ---
@@ -139,15 +144,13 @@ For production, [register your own API ID/Hash](https://my.telegram.org) and set
 
 ## 📈 Version
 
-- **Current version:** See [VERSION](./VERSION)  
+- **Current version:** [`v1.3.0`](./VERSION)
 - **Release notes:** https://github.com/Khapra/xtension-bot/releases
 
 ---
 
 ## 💡 Enjoy!  
 Questions? [Open an Issue](https://github.com/Khapra/xtension-bot/issues) — Feedback & PRs welcome!
-
----
 
 **Author:** [Khapra](https://github.com/Khapra)  
 **License:** MIT  

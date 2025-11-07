@@ -71,7 +71,7 @@ jobs:
           repository: ${{ env.IMAGE_NAME }}
           readme-filepath: ./README.md
 
-      # --- Github release note automation - for tag pushes ---
+      # --- Github release note automation - for tag pushes ONLY ---
       - name: Create GitHub Release (if on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2

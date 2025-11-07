@@ -1,0 +1,40 @@
+# .dockerignore for xtension-bot: Ensures plugins directory is empty in image except README and .keep
+
+plugins/*
+!plugins/README.md
+!plugins/.keep
+
+# Ignore Python cache, venv, build, and junk
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+.env
+.venv
+env/
+venv/
+build/
+dist/
+.eggs/
+*.egg-info/
+.cache/
+.coverage
+.tox/
+.pytest_cache/
+.nox/
+.mypy_cache/
+.dmypy.json
+.pyre/
+.idea/
+.vscode/
+*.log
+
+# Git-related
+.git/
+.github/
+.gitignore
+
+# Dockerfile and itself
+Dockerfile*
+.dockerignore

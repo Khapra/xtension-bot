@@ -71,17 +71,6 @@ jobs:
           repository: ${{ env.IMAGE_NAME }}
           readme-filepath: ./README.md
 
-      # --- Automated version bump in VERSION file on tag push ---
-      - name: Bump version in VERSION file (if on tag)
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          echo "${{ github.ref_name }}" > VERSION
-          git config --global user.name "Github Actions"
-          git config --global user.email "actions@github.com"
-          git add VERSION
-          git commit -m "ci: bump VERSION file for ${{ github.ref_name }}"
-          git push origin HEAD:main
-
       # --- Github release note automation - for tag pushes ---
       - name: Create GitHub Release (if on tag)
         if: startsWith(github.ref, 'refs/tags/')

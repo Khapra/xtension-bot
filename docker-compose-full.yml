@@ -1,0 +1,88 @@
+version: "3.8"
+
+services:
+  xtension-bot:
+    image: khapra/xtension-bot:latest
+    container_name: xtension-bot-1
+
+    # --- Environment variables for USER CONFIGURATION ---
+    environment:
+      # ----- MANDATORY (must be set by user) -----
+      # Telegram Bot Token (get from @BotFather)
+      BOT_TOKEN: "replace-with-your-token"
+
+      # Telegram API credentials (get from https://my.telegram.org)
+      API_ID: 123456                # Mandatory: Your Telegram API ID (integer)
+      API_HASH: "your_api_hash"     # Mandatory: Your Telegram API Hash (string)
+
+      # ----- OPTIONAL -----
+      # Administrator user IDs (comma separated, e.g. "12345678,87654321"). If omitted, all users act as admins.
+      ADMIN_IDS: ""                 # Optional: Telegram user IDs permitted to use admin commands
+
+      # Enable/disabling plugin auto-loading system (true/false, default: true)
+      ENABLE_PLUGINS: "true"        # Optional: Enable plugin system (default true)
+
+      # Path where plugins are loaded from (container path, default: plugins)
+      PLUGIN_DIR: "plugins"         # Optional: Directory inside container for plugins
+
+      # Logging
+      LOG_LEVEL: "INFO"             # Optional: Set log level: DEBUG, INFO, WARNING, ERROR (default: INFO)
+
+      # Session
+      SESSION_TYPE: "sqlite"        # Optional: "sqlite" or "memory". Default is sqlite (persistent)
+      SESSION_DIR: "/app/sessions"  # Optional: Directory for storing session files
+      SESSION_NAME: "default"       # Optional: Session filename (default: default.session)
+
+      # Rate Limiting
+      RATE_LIMIT_PER_MINUTE: "30"   # Optional: Commands per minute (default: 30)
+      RATE_LIMIT_PER_HOUR: "300"    # Optional: Commands per hour (default: 300)
+      RATE_LIMIT_BURST: "5"         # Optional: Burst commands allowed (default: 5)
+      RATE_LIMIT_BURST_WINDOW: "10" # Optional: Time window for burst (seconds, default: 10)
+      RATE_LIMIT_COOLDOWN: "60"     # Optional: Cooldown period in seconds (default: 60)
+
+      # ----- FILE DOWNLOADER PLUGIN CONFIG -----
+      # Directory inside container for file storage (default: downloads)
+      FILEDL_STORAGE_DIR: "downloads"          # Optional
+
+      # File downloader plugin's database location
+      FILEDL_DB_PATH: "plugins/file_downloader.db"  # Optional
+
+      # File downloader plugin admin IDs (comma separated, bootstrap only)
+      FILEDL_ADMIN_IDS: ""                     # Optional
+
+      # Max concurrent downloads (default 2)
+      FILEDL_MAX_WORKERS: "2"                  # Optional
+
+      # Max number of retries per download (default 5)
+      FILEDL_MAX_RETRIES: "5"                  # Optional
+
+      # File downloader plugin's log location
+      FILEDL_LOG_PATH: "plugins/file_downloader.log" # Optional
+
+    volumes:
+      # Mount local plugin code and downloads dir for persistence & development
+      - ./plugins:/app/plugins              # Plugins directory
+      - ./downloads:/app/downloads          # Local downloads (persistent file storage)
+      - ./sessions:/app/sessions            # Persistent session storage
+
+    restart: always
+
+    # --- PORTS (if you expose any HTTP API or service, add here, though Telegram bots do not need it by default) ---
+    # ports:
+    #   - "8080:8080"   # Example (remove or customize if needed)
+
+    # --- LOGS (optional: configure logging driver if desired) ---
+    # logging:
+    #   driver: "json-file"
+    #   options:
+    #     max-size: "10m"
+    #     max-file: "3"
+
+# -----------------------------
+# Summary:
+# - Replace BOT_TOKEN, API_ID and API_HASH with your actual Telegram bot/token and API credentials.
+# - All other environment variables are optional and defaulted.
+# - Admin management: set ADMIN_IDS for bot-level admin control, and FILEDL_ADMIN_IDS for plugin-specific bootstrap.
+# - Plugins and downloader persist files in ./downloads (host) mapped to /app/downloads (container).
+
+# For more details, see https://github.com/Khapra/xtension-bot

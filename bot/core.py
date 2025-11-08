@@ -130,14 +130,15 @@ class XtensionBot(TelegramClient):
         await super().start(bot_token=self.config.bot_token)
         self.me = await self.get_me()
 
-        # Warn if the default Telegram demo credentials are used
+        # Warn if using demo or public fallback keys
         if (
-            getattr(self.config, "api_id", None) == 149344 and
-            getattr(self.config, "api_hash", None) == "1c760da900d9a3e28b17c16410680dae"
+            (getattr(self.config, "api_id", None) == 149344 and getattr(self.config, "api_hash", None) == "1c760da900d9a3e28b17c16410680dae") or
+            (getattr(self.config, "api_id", None) == 6 and getattr(self.config, "api_hash", None) == "eb06d4abfb49dc3eeb1aeb98ae0f581e")
         ):
             print(
                 "\n"
-                "⚠️  WARNING: Bot is running with the TELEGRAM DEMO API ID/HASH (149344/1c760da900d9a3e28b17c16410680dae)\n"
+                "⚠️  WARNING: Bot is running with DEMO or DEFAULT TELEGRAM API ID/HASH!\n"
+                f"(Current: {self.config.api_id}, {self.config.api_hash})\n"
                 "This is for TESTING only. For production, obtain your own API keys at https://my.telegram.org and set them in your .env file!\n"
             )
                     

@@ -131,6 +131,7 @@ class XtensionBot(TelegramClient):
         self.me = await self.get_me()
 
         # Warn if using demo or public fallback keys (check ACTUAL values used)
+        api_id, api_hash = self.config.get_api_credentials()
         if (
             (api_id == 149344 and api_hash == "1c760da900d9a3e28b17c16410680dae") or
             (api_id == 6 and api_hash == "eb06d4abfb49dc3eeb1aeb98ae0f581e")
@@ -141,7 +142,7 @@ class XtensionBot(TelegramClient):
                 f"(Current: {api_id}, {api_hash})\n"
                 "This is for TESTING only. For production, obtain your own API keys at https://my.telegram.org and set them in your .env file!\n"
             )
-                                
+                                            
         logger.info(f"Logged in as @{self.me.username} (ID: {self.me.id})")
         logger.debug(f"Bot name: {self.me.first_name}")
 

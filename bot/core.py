@@ -1,4 +1,13 @@
-"""Core bot implementation using Telethon"""
+"""Core bot implementation using Telethon
+
+Xtension Bot v1.3.8
+2025-11-09
+
+Features:
+- Plugin system, admin system, rate limiting, hot-reload, logging.
+- Correct API warning logic for demo/fallback keys.
+- Safe sender name display in core handlers.
+"""
 
 import logging
 import os
@@ -15,7 +24,7 @@ from telethon.sessions import SQLiteSession, MemorySession
 from .config import Config
 from .rate_limiter import RateLimiter
 
-# Configure logging based on environment
+# === Logging setup ===
 logger = logging.getLogger(__name__)
 
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -43,8 +52,16 @@ def debug_log_command(handler_name):
         async def wrapper(event):
             if logger.isEnabledFor(logging.DEBUG):
                 sender = await event.get_sender()
-                sender_info = f"{sender.first_name} (@{sender.username or 'no_username'}, ID: {sender.id})"
-                
+                sender_info = None
+                # Defensive display for debug
+                if hasattr(sender, "first_name") and sender.first_name:
+                    sender_info = sender.first_name
+                elif hasattr(sender, "title") and sender.title:
+                    sender_info = sender.title
+                elif hasattr(sender, "username") and sender.username:
+                    sender_info = f"@{sender.username}"
+                else:
+                    sender_info = "Unknown"
                 if hasattr(event, 'pattern_match') and event.pattern_match:
                     command = event.pattern_match.string
                     logger.debug(f"[COMMAND] {handler_name}: '{command}' from {sender_info}")
@@ -52,7 +69,6 @@ def debug_log_command(handler_name):
                     logger.debug(f"[BUTTON] {handler_name}: {event.data.decode()} from {sender_info}")
                 else:
                     logger.debug(f"[EVENT] {handler_name} triggered by {sender_info}")
-            
             try:
                 result = await func(event)
                 if logger.isEnabledFor(logging.DEBUG):
@@ -80,13 +96,23 @@ def _read_version_from_file() -> str:
         pass
     return "unknown"
 
+def safe_sender_display(sender):
+    """Safely display sender's identity: works for user, bot, group, channel"""
+    if hasattr(sender, "first_name") and sender.first_name:
+        return sender.first_name
+    if hasattr(sender, "title") and sender.title:
+        return sender.title
+    if hasattr(sender, "username") and sender.username:
+        return f"@{sender.username}"
+    return "Unknown"
+
 class XtensionBot(TelegramClient):
     """Main bot class with plugin system and admin commands"""
-    
+
     def __init__(self, config: Config):
         self.config = config
         api_id, api_hash = config.get_api_credentials()
-        
+
         logger.debug(f"Initializing bot with session type: {config.session_type}")
 
         if config.session_type == "memory":
@@ -97,6 +123,7 @@ class XtensionBot(TelegramClient):
             session = SQLiteSession(str(session_path))
             logger.debug(f"Session path: {session_path}")
 
+        # Call parent TelethonClient init with actual credentials
         super().__init__(
             session, api_id, api_hash,
             connection_retries=5, 
@@ -107,11 +134,11 @@ class XtensionBot(TelegramClient):
         self._start_time = datetime.now()
         self.version = _read_version_from_file()
         self.commands_processed = 0
-        
+
         # Admin configuration
         self.admin_ids = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x]
         logger.debug(f"Admin IDs configured: {self.admin_ids if self.admin_ids else 'None (all users are admins)'}")
-        
+
         # Initialize rate limiter
         self.rate_limiter = RateLimiter(
             commands_per_minute=int(os.getenv("RATE_LIMIT_PER_MINUTE", "30")),
@@ -126,12 +153,13 @@ class XtensionBot(TelegramClient):
         """Start the bot and initialize all systems"""
         logger.info(f"Starting Xtension Bot v{self.version}...")
         logger.debug("Connecting to Telegram servers...")
-        
+
+        api_id, api_hash = self.config.get_api_credentials()
+
         await super().start(bot_token=self.config.bot_token)
         self.me = await self.get_me()
 
         # Warn if using demo or public fallback keys (check ACTUAL values used)
-        api_id, api_hash = self.config.get_api_credentials()
         if (
             (api_id == 149344 and api_hash == "1c760da900d9a3e28b17c16410680dae") or
             (api_id == 6 and api_hash == "eb06d4abfb49dc3eeb1aeb98ae0f581e")
@@ -142,7 +170,7 @@ class XtensionBot(TelegramClient):
                 f"(Current: {api_id}, {api_hash})\n"
                 "This is for TESTING only. For production, obtain your own API keys at https://my.telegram.org and set them in your .env file!\n"
             )
-                                            
+            
         logger.info(f"Logged in as @{self.me.username} (ID: {self.me.id})")
         logger.debug(f"Bot name: {self.me.first_name}")
 
@@ -164,18 +192,18 @@ class XtensionBot(TelegramClient):
         print(f"📝 Log Level: {os.getenv('LOG_LEVEL', 'INFO')}")
         print(f"🛡️ Rate Limiting: {self.rate_limiter.commands_per_minute}/min")
         print(f"{'='*50}\n")
-        
+
         logger.info(f"Bot ready with {len(self.plugins)} plugins loaded")
-        
+
         await self.run_until_disconnected()
-    
+
     def is_admin(self, user_id):
         """Check if user has admin privileges"""
         is_admin = not self.admin_ids or user_id in self.admin_ids
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"Admin check for user {user_id}: {'✓' if is_admin else '✗'}")
         return is_admin
-    
+
     async def check_rate_limit(self, event):
         """Check if user is rate limited"""
         if self.is_admin(event.sender_id):
@@ -189,7 +217,7 @@ class XtensionBot(TelegramClient):
 
     def _register_handlers(self):
         """Register all core command handlers"""
-        
+
         @self.on(events.NewMessage(pattern='/start'))
         @debug_log_command("start")
         async def start_handler(event):
@@ -198,14 +226,15 @@ class XtensionBot(TelegramClient):
             self.commands_processed += 1
             sender = await event.get_sender()
             admin_text = " (Admin)" if self.is_admin(event.sender_id) else ""
+            who = safe_sender_display(sender)
             await event.reply(
-                f"👋 Welcome {sender.first_name}{admin_text}!\n\n"
+                f"👋 Welcome {who}{admin_text}!\n\n"
                 f"🤖 **Xtension Bot v{self.version}**\n"
                 f"A powerful, extensible Telegram bot framework\n\n"
                 f"Use /help to see all commands.",
                 buttons=[[Button.inline("📚 Help", b"show_help")]]
             )
-        
+
         @self.on(events.CallbackQuery(data=b"show_help"))
         @debug_log_command("help_button")
         async def help_button(event):
@@ -267,9 +296,9 @@ class XtensionBot(TelegramClient):
                 f"[GitHub Repository](https://github.com/Khapra/xtension-bot)",
                 parse_mode='md'
             )
-        
+
         # === ADMIN COMMANDS ===
-        
+
         @self.on(events.NewMessage(pattern='/reload'))
         @debug_log_command("reload")
         async def reload_handler(event):
@@ -467,11 +496,11 @@ class XtensionBot(TelegramClient):
             
             else:
                 await event.reply("Usage: /ratelimit [global|stats <user_id>|reset <user_id>]")
-    
+
     def _get_all_commands(self, user_id):
         """Dynamically get all available commands based on loaded plugins"""
         logger.debug(f"Getting commands for user {user_id}")
-        
+
         commands = {
             "📍 Core Commands": {
                 "/start": "Show welcome message and bot information",
@@ -481,7 +510,7 @@ class XtensionBot(TelegramClient):
                 "/version": "Show bot version and info"
             }
         }
-        
+
         # Add admin commands if user is admin
         if self.is_admin(user_id):
             commands["🔐 Admin Commands"] = {
@@ -491,20 +520,20 @@ class XtensionBot(TelegramClient):
                 "/stats": "Detailed bot statistics",
                 "/ratelimit": "Manage rate limiting (view stats, reset users)"
             }
-        
+
         # Dynamically add plugin commands from loaded plugins
         for plugin_name, plugin in sorted(self.plugins.items()):
             if hasattr(plugin, 'commands') and plugin.commands:
                 category = f"🔌 {plugin_name.capitalize()} Plugin"
                 commands[category] = plugin.commands
                 logger.debug(f"Added {len(plugin.commands)} commands from {plugin_name}")
-        
+
         return commands
-    
+
     def _format_help_text(self, commands):
         """Format commands dictionary into readable help text"""
         text = f"📚 **Xtension Bot v{self.version} Commands**\n\n"
-        
+
         total_commands = 0
         for category, cmds in commands.items():
             text += f"**{category}:**\n"
@@ -518,7 +547,7 @@ class XtensionBot(TelegramClient):
                     text += f"• {cmd}\n"
                     total_commands += 1
             text += "\n"
-        
+
         text += f"_Total: {total_commands} commands available_"
         return text
 
@@ -526,9 +555,9 @@ class XtensionBot(TelegramClient):
         """Load all plugins from the plugins directory with automatic logging and rate limiting"""
         plugin_dir = Path(self.config.plugin_dir)
         plugin_dir.mkdir(exist_ok=True)
-        
+
         logger.debug(f"Plugin directory: {plugin_dir.absolute()}")
-        
+
         # Create example plugin if directory is empty
         example = plugin_dir / "example.py"
         if not any(plugin_dir.glob("*.py")):
@@ -563,13 +592,13 @@ class TelethonPlugin:
 
         loaded_count = 0
         failed_plugins = []
-        
+
         # Load each Python file as a plugin
         for plugin_file in sorted(plugin_dir.glob("*.py")):
             if plugin_file.name.startswith("_"):
                 logger.debug(f"Skipping {plugin_file.name} (starts with underscore)")
                 continue
-            
+
             logger.debug(f"Loading plugin: {plugin_file.name}")
             try:
                 # Import the plugin module
@@ -588,38 +617,27 @@ class TelethonPlugin:
                     # Register handlers with logging wrapper in debug mode
                     if hasattr(plugin, "register_handlers"):
                         if logger.isEnabledFor(logging.DEBUG):
-                            # Import wrapper utility
                             from .plugin_wrapper import create_logged_handler
-                            
-                            # Store original on method
                             original_on = self.on
-                            
-                            # Create wrapped version that adds logging
+
                             def logged_on(event_type):
                                 def decorator(handler):
                                     wrapped = create_logged_handler(handler, plugin_file.stem, self)
                                     return original_on(event_type)(wrapped)
                                 return decorator
-                            
-                            # Temporarily replace on method
+
                             self.on = logged_on
-                            
-                            # Register handlers (they'll be wrapped automatically)
                             plugin.register_handlers()
-                            
-                            # Restore original on method
                             self.on = original_on
-                            
                             logger.debug(f"Registered handlers for {plugin_file.stem} with logging")
                         else:
-                            # Normal registration without logging wrapper
                             plugin.register_handlers()
                             logger.debug(f"Registered handlers for {plugin_file.stem}")
-                    
+
                     # Store plugin instance
                     self.plugins[plugin_file.stem] = plugin
                     loaded_count += 1
-                    
+
                     # Log plugin info
                     cmd_count = len(getattr(plugin, 'commands', {}))
                     logger.info(f"Loaded plugin: {plugin_file.stem} ({cmd_count} commands)")
@@ -633,9 +651,10 @@ class TelethonPlugin:
                     import traceback
                     logger.debug(traceback.format_exc())
                 failed_plugins.append(plugin_file.stem)
-        
+
         # Summary
         if failed_plugins:
             logger.warning(f"Failed to load plugins: {', '.join(failed_plugins)}")
-        
+
         logger.info(f"Plugin loading complete: {loaded_count} loaded, {len(failed_plugins)} failed")
+        

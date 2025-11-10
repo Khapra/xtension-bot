@@ -1,30 +1,38 @@
 """
-Xtension Bot File Downloader Plugin (Telethon)
+Xtension Bot File Downloader Plugin (Admin/PM workflow)
 
-Robust plugin for asynchronous, persistent file downloads from monitored channels and private admin commands.
+Minimal, robust file downloader for Telegram bot PM/file workflows.
+Admins can reply /save to any file/media message in private chat; files are downloaded, deduplicated, and automatically sorted by category into subdirectories: Music, Videos, Images, Documents, Others.
+
+Config is read from the bot core config (for data_dir, log_level, admin IDs), but can also be overridden with manual mount via the /setdownloadpath command.
+Workers, categories, and paths are configurable with commands (see below).
+
 Features:
-- Add/remove channels to monitor by channel ID (admin only in private chat).
-- Queue all channel media messages and allow manual file save (/save command).
-- Persistent SQLite WAL queue: survives restarts/crash.
-- Async background workers, configurable count (MAX_WORKERS).
-- Dedupe and retry with exponential backoff.
-- Unified admin system: core bot admin + plugin allowlist, all sensitive/admin ops are private-only.
-- Clear, human-readable, and enriched logging (file + console, respects LOG_LEVEL).
-- Guards against double worker/log startup (see comments for details).
-- All management commands are private/admin only for maximum security.
+- Manual file save via /save reply in private chat (admin only, secure)
+- Files saved to download_dir/{Category}/ (Music, Videos, Images, Documents, Others)
+- Configurable downloads directory (prefix) via /setdownloadpath <path>
+- Configurable number of workers via /setworkers <num>
+- Async, persistent download queue (SQLite WAL)
+- Deduplication via file_unique
+- Robust admin management (uses bot.admin_ids and/or extra plugin admins)
+- Status, error, queue commands for ops
+- Each downloaded file notifies in PM (filename, category, path)
+- Error logs for troubleshooting
+- No channel monitoring; only PM/DM file saving!
 
 Commands:
-/addchannel <chat_id>     - Monitor a new channel (private admin chat)
-/removechannel <chat_id>  - Remove monitored channel (private admin chat)
-/listchannels             - Show all monitored channel IDs
-/save (on reply)          - Save the replied-to message's file (admin/private only)
-/status                   - Show queue/download stats
-/queuesize                - Show current queue length
-/allowuser <id|@username> - Add plugin admin (admin/private only)
-/revokeuser <id|@username>- Remove plugin admin (admin/private only)
-/confirm <token>          - Confirm admin change
-/listadmins               - Show all core/plugin admins
-/lasterrors [n]           - Show last n plugin error logs
+/save (reply in PM)        - Save the replied file/media (admin only)
+/status                    - Show download stats by category, queue size
+/queuesize                 - Show current queue length
+/setdownloadpath <path>    - Manually set download directory (admin only)
+/setworkers <num>          - Set number of worker threads for download (admin only)
+/allowuser <id|@username>  - Add plugin admin (admin/private only)
+/revokeuser <id|@username> - Remove plugin admin (admin/private only)
+/confirm <token>           - Confirm admin change (admin/private only)
+/listadmins                - Show all bot/plugin admins
+/lasterrors [n]            - Show recent plugin error logs
+
+NOTE: Respects bot core settings for data_dir, log_level, admin_ids unless overridden by command.
 
 Author: Copilot for Khapra – Nov 2025
 """
@@ -42,19 +50,37 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from telethon import events
 
-# --- Config ---
-STORAGE_DIR = Path(os.getenv("FILEDL_STORAGE_DIR", "/app/downloads"))
-DB_PATH = Path(os.getenv("FILEDL_DB_PATH", "/app/data/file_downloader.db"))
-LOG_PATH = Path(os.getenv("FILEDL_LOG_PATH", "/app/data/file_downloader.log"))
-MAX_WORKERS = int(os.getenv("FILEDL_MAX_WORKERS", "2"))
-MAX_RETRIES = int(os.getenv("FILEDL_MAX_RETRIES", "5"))
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+# ---- Load Bot Config Defaults (import if available) ----
+BOT_CONFIG = None
+DOWNLOAD_DIR = None
 
-STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    from bot import config
+    BOT_CONFIG = config.Config.from_environment()
+    DOWNLOAD_DIR = Path(BOT_CONFIG.data_dir) / "downloads"
+except ImportError:
+    DOWNLOAD_DIR = Path(os.getenv("DOWNLOAD_DIR", "/app/downloads"))
+LOG_PATH = Path(os.getenv("FILEDL_LOG_PATH", "/app/data/file_downloader.log"))
+DB_PATH = Path(os.getenv("FILEDL_DB_PATH", "/app/data/file_downloader.db"))
+LOG_LEVEL = os.getenv("LOG_LEVEL", (BOT_CONFIG.log_level if BOT_CONFIG else "INFO")).upper()
+MAX_WORKERS = int(os.getenv("FILEDL_MAX_WORKERS", "2"))
+
+CATEGORIES = {
+    "Music": [".mp3", ".aac", ".wav", ".flac", ".ogg", ".m4a"],
+    "Videos": [".mp4", ".avi", ".mov", ".mkv", ".webm", ".wmv"],
+    "Images": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"],
+    "Documents": [".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".txt", ".rtf"],
+}
+
+DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-# --- Logging ---
+for cat in CATEGORIES:
+    (DOWNLOAD_DIR / cat).mkdir(parents=True, exist_ok=True)
+(DOWNLOAD_DIR / "Others").mkdir(parents=True, exist_ok=True)
+
+# ---- Logging ----
 logger = logging.getLogger("filedl")
 logger.handlers.clear()
 file_handler = RotatingFileHandler(str(LOG_PATH), maxBytes=5*1024*1024, backupCount=3, encoding="utf-8")
@@ -77,10 +103,16 @@ def log_info(msg, **ctx):
 def log_error(msg, **ctx):
     logger.error(msg + (" | " + " ".join(f"{k}={v}" for k, v in ctx.items()) if ctx else ""))
 
-# --- DB and helpers ---
 def _safe_filename(name):
     if not name: return "file.bin"
     return re.sub(r"[^\w\-_. ]+", "_", name)[:200]
+
+def _file_category(filename):
+    ext = os.path.splitext(filename)[-1].lower()
+    for cat, exts in CATEGORIES.items():
+        if ext in exts:
+            return cat
+    return "Others"
 
 def _gen_token():
     return hashlib.sha1(f"{time.time()}-{os.urandom(8)}".encode()).hexdigest()[:12]
@@ -94,10 +126,6 @@ def _init_db():
     with _get_conn() as conn:
         cur = conn.cursor()
         cur.execute("PRAGMA journal_mode=WAL;")
-        cur.execute("""CREATE TABLE IF NOT EXISTS channels (
-            chat_id INTEGER PRIMARY KEY,
-            added_by INTEGER,
-            added_at TEXT)""")
         cur.execute("""CREATE TABLE IF NOT EXISTS files (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             file_id TEXT,
@@ -110,6 +138,7 @@ def _init_db():
             retries INTEGER DEFAULT 0,
             md5 TEXT,
             sha256 TEXT,
+            category TEXT,
             created_at TEXT,
             updated_at TEXT)""")
         cur.execute("""CREATE TABLE IF NOT EXISTS queue (
@@ -119,6 +148,7 @@ def _init_db():
             chat_id INTEGER,
             message_id INTEGER,
             filename TEXT,
+            category TEXT,
             retries INTEGER DEFAULT 0,
             status TEXT DEFAULT 'queued',
             created_at TEXT,
@@ -154,7 +184,6 @@ def _compute_hashes(path):
     return md5.hexdigest(), sha256.hexdigest()
 
 def sender_display(sender):
-    """Get the sender name/title for reply messages."""
     if hasattr(sender, "first_name") and sender.first_name:
         who = sender.first_name
     elif hasattr(sender, "title") and sender.title:
@@ -163,37 +192,36 @@ def sender_display(sender):
         who = getattr(sender, "username", "unknown")
     return who
 
-# --- Main Plugin Class ---
 class TelethonPlugin:
-    # Shared set so even if core loads/reloads, only one instance logs as "initialized"
     instance_ids = set()
     def __init__(self, bot):
         self.bot = bot
         self.commands = {
-            "/addchannel":  "Add channel (private admin chat)",
-            "/removechannel":"Remove channel (private admin chat)",
-            "/listchannels": "Show monitored channels",
-            "/save":        "Reply to file, queue/save (private admin chat)",
-            "/status":      "Show download/queue status",
+            "/save":        "Reply to file, queue/save (private admin chat only)",
+            "/status":      "Show download/queue status by category",
             "/queuesize":   "Queue size",
-            "/allowuser":   "Add plugin admin (private chat)",
-            "/revokeuser":  "Remove plugin admin (private chat)",
-            "/confirm":     "Confirm pending admin change",
-            "/listadmins":  "Show core/plugin admins",
+            "/setdownloadpath": "Manually set download directory (admin only)",
+            "/setworkers":  "Set number of worker threads (admin only)",
+            "/allowuser":   "Add plugin admin (private admin chat only)",
+            "/revokeuser":  "Remove plugin admin (private admin chat only)",
+            "/confirm":     "Confirm admin action (token based)",
+            "/listadmins":  "Show all core/plugin admins",
             "/lasterrors":  "Show recent error logs"
         }
         self._in_memory_queue = asyncio.Queue()
-        _init_db()
         self._workers_started = False
         self.instance_id = id(self)
-        # Only log instance creation once per actual instance
+        self.download_dir = DOWNLOAD_DIR
+        self.max_workers = MAX_WORKERS
+        _init_db()
         if self.instance_id not in TelethonPlugin.instance_ids:
             TelethonPlugin.instance_ids.add(self.instance_id)
             log_info("FileDownloader plugin instance initialized", instance_id=self.instance_id, loglevel=LOG_LEVEL)
-
+    
+    # Use core bot config for admin_ids (fallback), also plugin_admins
     async def _is_admin(self, user_id):
-        if hasattr(self.bot, "admin_ids") and user_id in self.bot.admin_ids:
-            return True
+        ids = getattr(self.bot, "admin_ids", [])
+        if user_id in ids: return True
         loop = asyncio.get_running_loop()
         def admin_in_db(uid):
             with _get_conn() as conn:
@@ -203,28 +231,27 @@ class TelethonPlugin:
         return await loop.run_in_executor(None, admin_in_db, user_id)
 
     async def _enqueue_db(self, file_id, file_unique, chat_id, message_id, filename):
-        """Add file to persistent DB + memory queue."""
         now = datetime.utcnow().isoformat()
+        category = _file_category(filename or "file.bin")
         def insert_queue():
             with _get_conn() as conn:
                 cur = conn.cursor()
-                cur.execute("INSERT OR IGNORE INTO files (file_id, file_unique, chat_id, message_id, filename, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
-                    (str(file_id), file_unique, chat_id, message_id, filename, "queued", now, now))
-                cur.execute("INSERT INTO queue (file_id, file_unique, chat_id, message_id, filename, status, created_at) VALUES (?,?,?,?,?,?,?)",
-                    (str(file_id), file_unique, chat_id, message_id, filename, "queued", now))
+                cur.execute("INSERT OR IGNORE INTO files (file_id, file_unique, chat_id, message_id, filename, status, category, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (str(file_id), file_unique, chat_id, message_id, filename, "queued", category, now, now))
+                cur.execute("INSERT INTO queue (file_id, file_unique, chat_id, message_id, filename, category, status, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                    (str(file_id), file_unique, chat_id, message_id, filename, category, "queued", now))
                 conn.commit()
                 return cur.lastrowid
         loop = asyncio.get_running_loop()
         qid = await loop.run_in_executor(None, insert_queue)
-        log_info("Enqueued file for download", file_id=file_id, filename=filename, chat_id=chat_id, queue_id=qid)
+        log_info("Enqueued file for download", file_id=file_id, filename=filename, chat_id=chat_id, queue_id=qid, category=category)
         await self._in_memory_queue.put({
             "id": qid, "file_id": str(file_id), "file_unique": file_unique,
             "chat_id": chat_id, "message_id": message_id, "filename": filename,
-            "retries": 0, "status": "queued"
+            "category": category, "retries": 0, "status": "queued"
         })
 
     async def _worker(self, worker_id):
-        """Async background downloader for queued files."""
         log_info("Downloader worker started", worker=worker_id, instance_id=self.instance_id)
         while True:
             item = await self._in_memory_queue.get()
@@ -235,38 +262,39 @@ class TelethonPlugin:
             chat_id = item.get("chat_id")
             message_id = item.get("message_id")
             filename = item.get("filename")
+            category = item.get("category", "Others")
             retries = item.get("retries", 0)
             try:
                 msg = await self.bot.get_messages(chat_id, ids=message_id)
                 if not msg: raise RuntimeError("Cannot fetch telegram message")
-                safe_chat = str(chat_id).lstrip("-")
-                target_dir = Path(STORAGE_DIR) / safe_chat
-                target_dir.mkdir(parents=True, exist_ok=True)
                 safe_name = _safe_filename(filename or str(file_unique or message_id))
+                target_dir = self.download_dir / category
+                target_dir.mkdir(parents=True, exist_ok=True)
                 target_path = target_dir / safe_name
-                log_info("Worker downloading file...", worker=worker_id, file=safe_name, chat_id=chat_id, message_id=message_id, instance_id=self.instance_id)
+                log_info("Worker downloading file...", worker=worker_id, file=safe_name, chat_id=chat_id, category=category, message_id=message_id, instance_id=self.instance_id)
                 path = await self.bot.download_media(msg, file=str(target_path))
                 if not path: raise RuntimeError("Failed to download media")
                 md5, sha256 = await asyncio.get_running_loop().run_in_executor(None, _compute_hashes, str(path))
                 def finish_db():
                     with _get_conn() as conn:
                         cur = conn.cursor()
-                        cur.execute("UPDATE files SET path=?, status=?, retries=?, md5=?, sha256=?, updated_at=? WHERE file_unique=?",
-                            (str(path), "downloaded", retries, md5, sha256, datetime.utcnow().isoformat(), file_unique))
+                        cur.execute("UPDATE files SET path=?, status=?, retries=?, md5=?, sha256=?, category=?, updated_at=? WHERE file_unique=?",
+                            (str(path), "downloaded", retries, md5, sha256, category, datetime.utcnow().isoformat(), file_unique))
                         cur.execute("UPDATE queue SET status=? WHERE id=?", ("done", qid))
                         conn.commit()
                 await asyncio.get_running_loop().run_in_executor(None, finish_db)
-                log_info("Downloaded and saved file", worker=worker_id, target_path=str(target_path), md5=md5, sha256=sha256, instance_id=self.instance_id)
-                try: await self.bot.send_message(chat_id, f"File saved: {safe_name}")
+                log_info("Downloaded and saved file", worker=worker_id, target_path=str(target_path), md5=md5, sha256=sha256, category=category, instance_id=self.instance_id)
+                try:
+                    await self.bot.send_message(chat_id, f"File saved: {safe_name}\nCategory: {category}\nPath: {target_path}")
                 except Exception: log_debug("Chat notify failed (nonfatal)", chat_id=chat_id)
             except Exception as e:
-                log_error("Worker download error", worker=worker_id, message=str(e), file=filename, queue_id=qid, retries=retries, instance_id=self.instance_id)
+                log_error("Worker download error", worker=worker_id, message=str(e), file=filename, queue_id=qid, retries=retries, category=category, instance_id=self.instance_id)
                 def err_db():
                     with _get_conn() as conn:
                         cur = conn.cursor()
                         cur.execute("INSERT INTO events (level, message, context_json, created_at) VALUES (?,?,?,?)",
                             ("ERROR", str(e), str(item), datetime.utcnow().isoformat()))
-                        if retries+1 >= MAX_RETRIES:
+                        if retries+1 >= self.max_workers + 2:  # Allow more than MAX_WORKERS retries
                             cur.execute("UPDATE files SET status=?, retries=?, updated_at=? WHERE file_unique=?",
                                 ("failed", retries+1, datetime.utcnow().isoformat(), file_unique))
                             cur.execute("UPDATE queue SET status=? WHERE id=?", ("failed", qid))
@@ -274,8 +302,8 @@ class TelethonPlugin:
                             cur.execute("UPDATE queue SET retries=retries+1, status=? WHERE id=?", ("retry", qid))
                         conn.commit()
                 await asyncio.get_running_loop().run_in_executor(None, err_db)
-                if retries+1 < MAX_RETRIES:
-                    log_info("Retrying failed download after backoff", file=filename, attempt=retries+1, worker=worker_id, instance_id=self.instance_id)
+                if retries+1 < self.max_workers + 2:
+                    log_info("Retrying failed download after backoff", file=filename, attempt=retries+1, worker=worker_id, category=category, instance_id=self.instance_id)
                     await asyncio.sleep(min(60, 2**retries))
                     item["retries"] = retries+1
                     await self._in_memory_queue.put(item)
@@ -283,79 +311,41 @@ class TelethonPlugin:
                 self._in_memory_queue.task_done()
 
     def register_handlers(self):
-        # Double-start protection: only start workers for first instance (prevents duplicate logs/workers in reload)
+        # Enable dynamic worker setup and download_dir mounting
+        @self.bot.on(events.NewMessage(pattern=r"^/setdownloadpath(?:\s+(.+))?$"))
+        async def setdownloadpath_cmd(event):
+            if not await self._is_admin(event.sender_id): return await event.reply("Admins only.")
+            m = event.pattern_match
+            if not m or not m.group(1): return await event.reply("Usage: /setdownloadpath <dir>")
+            path = m.group(1).strip()
+            self.download_dir = Path(path)
+            for cat in CATEGORIES:
+                (self.download_dir / cat).mkdir(parents=True, exist_ok=True)
+            (self.download_dir / "Others").mkdir(parents=True, exist_ok=True)
+            log_info("Download directory set", download_dir=str(path))
+            await event.reply(f"Download directory set to: {path}")
+
+        @self.bot.on(events.NewMessage(pattern=r"^/setworkers(?:\s+(\d+))?$"))
+        async def setworkers_cmd(event):
+            if not await self._is_admin(event.sender_id): return await event.reply("Admins only.")
+            m = event.pattern_match
+            if not m or not m.group(1): return await event.reply("Usage: /setworkers <num>")
+            try:
+                num = int(m.group(1))
+                if not (1 <= num <= 16): raise ValueError
+            except ValueError:
+                return await event.reply("Worker count must be between 1 and 16.")
+            self.max_workers = num
+            log_info("Worker count updated", max_workers=num)
+            await event.reply(f"Max worker threads set to: {num}")
+        
         if not self._workers_started and self.instance_id in TelethonPlugin.instance_ids:
-            for i in range(MAX_WORKERS):
-                asyncio.create_task(self._worker(i + 1))  # Only once per plugin per process
+            for i in range(self.max_workers):
+                asyncio.create_task(self._worker(i + 1))
             self._workers_started = True
-            log_info("Downloader plugin started workers", workers=MAX_WORKERS, instance_id=self.instance_id)
+            log_info("Downloader plugin started workers", workers=self.max_workers, instance_id=self.instance_id)
 
-        # --- Admin/private commands ---
-        @self.bot.on(events.NewMessage(pattern=r'/hello'))
-        async def hello_handler(event):
-            sender = await event.get_sender()
-            who = sender_display(sender)
-            await event.reply(f'Hello {who}! 👋\nFile Downloader plugin active.')
-
-        @self.bot.on(events.NewMessage(pattern=r'^/addchannel(?:\s+(-?\d+))?$'))
-        async def addchannel(event):
-            if not await self._is_admin(event.sender_id):
-                return await event.reply("Admins only.")
-            if not event.is_private:
-                return await event.reply("Please run /addchannel in private chat.")
-            m = event.pattern_match
-            if not m or not m.group(1):
-                return await event.reply("Usage: /addchannel <chat_id> (e.g. -1001234567890)")
-            try:
-                chat_id = int(m.group(1).strip())
-            except Exception:
-                return await event.reply("Invalid channel ID, must be integer.")
-            now = datetime.utcnow().isoformat()
-            def doit():
-                with _get_conn() as conn:
-                    cur = conn.cursor()
-                    cur.execute("INSERT OR REPLACE INTO channels (chat_id, added_by, added_at) VALUES (?,?,?)",
-                        (chat_id, event.sender_id, now))
-                    conn.commit()
-            await asyncio.get_running_loop().run_in_executor(None, doit)
-            log_info("Channel added for monitoring", chat_id=chat_id, sender_id=event.sender_id)
-            await event.reply(f"Added channel to monitor: {chat_id}")
-
-        @self.bot.on(events.NewMessage(pattern=r'^/removechannel(?:\s+(-?\d+))?$'))
-        async def removechannel(event):
-            if not await self._is_admin(event.sender_id):
-                return await event.reply("Admins only.")
-            if not event.is_private:
-                return await event.reply("Please run /removechannel in private chat.")
-            m = event.pattern_match
-            if not m or not m.group(1):
-                return await event.reply("Usage: /removechannel <chat_id>")
-            try:
-                chat_id = int(m.group(1).strip())
-            except Exception:
-                return await event.reply("Invalid channel ID.")
-            def doit():
-                with _get_conn() as conn:
-                    cur = conn.cursor()
-                    cur.execute("DELETE FROM channels WHERE chat_id=?", (chat_id,)); conn.commit()
-            await asyncio.get_running_loop().run_in_executor(None, doit)
-            log_info("Channel removed from monitoring", chat_id=chat_id, sender_id=event.sender_id)
-            await event.reply(f"Removed channel: {chat_id}")
-
-        @self.bot.on(events.NewMessage(pattern=r'^/listchannels$'))
-        async def listchannels(event):
-            if not await self._is_admin(event.sender_id):
-                return await event.reply("Admins only.")
-            def doit():
-                with _get_conn() as conn:
-                    cur = conn.cursor()
-                    cur.execute("SELECT chat_id FROM channels")
-                    return cur.fetchall()
-            rows = await asyncio.get_running_loop().run_in_executor(None, doit)
-            lines = [f"{r['chat_id']}" for r in rows]
-            await event.reply("Monitored channel IDs:\n" + ("\n".join(lines) if lines else "None"))
-            log_info("Listed monitored channels", sender_id=event.sender_id, num_channels=len(lines))
-
+        # Existing handlers from previous version, updated for dynamic config
         @self.bot.on(events.NewMessage(pattern=r"^/save$"))
         async def save_cmd(event):
             if not await self._is_admin(event.sender_id): return await event.reply("Admins only.")
@@ -370,14 +360,15 @@ class TelethonPlugin:
             def doit():
                 with _get_conn() as conn:
                     cur = conn.cursor()
-                    cur.execute("SELECT COUNT(*) as total FROM files WHERE status='downloaded'")
-                    dl = cur.fetchone()["total"]
+                    cur.execute("SELECT category, COUNT(*) as cnt FROM files WHERE status='downloaded' GROUP BY category")
+                    rows = cur.fetchall()
                     cur.execute("SELECT COUNT(*) as queued FROM queue WHERE status IN ('queued','retry')")
                     q = cur.fetchone()["queued"]
-                    return dl, q
-            dl, q = await asyncio.get_running_loop().run_in_executor(None, doit)
-            await event.reply(f"Downloaded: {dl}\nQueue size: {q}")
-            log_info("Plugin status requested", sender_id=event.sender_id, downloaded=dl, queued=q)
+                    return rows, q
+            rows, q = await asyncio.get_running_loop().run_in_executor(None, doit)
+            stats = "\n".join([f"{r['category']}: {r['cnt']}" for r in rows]) if rows else "No downloads yet"
+            await event.reply(f"Downloaded files:\n{stats}\nQueue size: {q}")
+            log_info("Plugin status requested", sender_id=event.sender_id, downloaded_stats=stats, queued=q)
 
         @self.bot.on(events.NewMessage(pattern=r"^/queuesize$"))
         async def queuesize_cmd(event):
@@ -518,23 +509,7 @@ class TelethonPlugin:
             await event.reply("Recent errors:\n" + ("\n".join(lines) if lines else "None"))
             log_info("Listed recent errors", sender_id=event.sender_id, error_count=len(lines))
 
-        # --- Channel/media watcher ---
-        @self.bot.on(events.NewMessage())
-        async def monitor_channel(event):
-            msg = event.message
-            if not getattr(msg, "media", None): return
-            chat = await event.get_chat()
-            def is_mon():
-                with _get_conn() as conn:
-                    cur = conn.cursor()
-                    cur.execute("SELECT 1 FROM channels WHERE chat_id=?", (chat.id,))
-                    return cur.fetchone() is not None
-            if not await asyncio.get_running_loop().run_in_executor(None, is_mon): return
-            log_debug("File/media message detected for monitored channel", chat_id=chat.id, message_id=msg.id)
-            await self._process_and_enqueue(msg, event)
-
     async def _process_and_enqueue(self, msg, event):
-        """Deduplicate and queue file/download for worker task."""
         file_id = None
         file_unique = None
         filename = None
@@ -546,6 +521,7 @@ class TelethonPlugin:
             file_unique = f"msg:{msg.id}"
         if not filename:
             filename = f"{file_unique}.bin"
+        category = _file_category(filename)
         def dedupe():
             with _get_conn() as conn:
                 cur = conn.cursor()
@@ -554,8 +530,8 @@ class TelethonPlugin:
                 return r
         existing = await asyncio.get_running_loop().run_in_executor(None, dedupe)
         if existing:
-            log_info("File deduplicated: already downloaded", file_unique=file_unique, path=existing['path'])
-            return await event.reply(f"File already processed/downloaded: {existing['path']}")
+            log_info("File deduplicated: already downloaded", file_unique=file_unique, path=existing['path'], category=category)
+            return await event.reply(f"File already processed/downloaded: {existing['path']} (Category: {category})")
         await self._enqueue_db(file_id, file_unique, msg.chat_id, msg.id, filename)
-        log_info("Queued file for download", file_unique=file_unique, filename=filename)
-        await event.reply(f"Queued {filename} for download")
+        log_info("Queued file for download", file_unique=file_unique, filename=filename, category=category)
+        await event.reply(f"Queued {filename} for download (Category: {category})")

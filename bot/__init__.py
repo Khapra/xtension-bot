@@ -2,7 +2,7 @@
 Xtension Bot package
 """
 
-__version__ = "4.0.0"
+__version__ = "1.4.1"
 
 from .core import XtensionBot
 from .config import Config

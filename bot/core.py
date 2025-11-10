@@ -1,7 +1,7 @@
 """Core bot implementation using Telethon
 
-Xtension Bot v1.3.8
-2025-11-09
+Xtension Bot v1.4.1
+2025-11-10
 
 Features:
 - Plugin system, admin system, rate limiting, hot-reload, logging.
